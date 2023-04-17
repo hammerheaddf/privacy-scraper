@@ -1,0 +1,6 @@
+selenium
+selenium-wire
+dynaconf
+requests
+sqlalchemy
+click

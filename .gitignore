@@ -1,0 +1,7 @@
+
+# Ignore dynaconf secret files
+.secrets.*
+downloads
+geckodriver.log
+__pycache__
+.vscode
