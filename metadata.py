@@ -20,22 +20,30 @@ class media_table(Base):
     downloaded: Mapped[bool] = cast(bool, mapped_column(sqlalchemy.Integer, default=0))
     created_at: Mapped[datetime] = cast(datetime, mapped_column(sqlalchemy.TIMESTAMP))
 
+class post_table(Base):
+    __tablename__ = "posts"
+    id: Mapped[int] = mapped_column(sqlalchemy.Integer, primary_key=True)
+    post_id: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=False)
+    post_text: Mapped[str] = cast(str, mapped_column(sqlalchemy.String))
+
 class metadata:
     dbpath = 'metadata.db'
     session: Session
     engine: sqlalchemy.Engine
-    table: media_table
+    mediatable: media_table
+    posttable: post_table
     def __init__(self, profilepath: str):
         self.dbpath = profilepath + '/' + self.dbpath
 
     def openDatabase(self):
         self.engine = sqlalchemy.create_engine("sqlite+pysqlite:///{0}".format(self.dbpath))
         self.session = Session(self.engine)
-        self.table = media_table
+        self.mediatable = media_table
+        self.posttable = post_table
         Base.metadata.create_all(self.engine)
-        # self.session.add(self.table)
+        # self.session.add(self.mediatable)
         self.session.flush()
-        return self.table
+        # return self.mediatable
     
     def saveLinks(self,mediainfo):
         with self.session as s:
@@ -54,7 +62,7 @@ class metadata:
             s.commit()
 
     def checkSaved(self,mediainfo):
-        stmt = sqlalchemy.select(self.table).filter_by(media_id=mediainfo['media_id'])
+        stmt = sqlalchemy.select(self.mediatable).filter_by(media_id=mediainfo['media_id'])
         try:
             reg = self.session.execute(stmt).scalar_one()
         except:
@@ -62,7 +70,7 @@ class metadata:
         return reg
 
     def checkDownloaded(self,mediainfo):
-        stmt = sqlalchemy.select(self.table).filter_by(media_id=mediainfo['media_id'])
+        stmt = sqlalchemy.select(self.mediatable).filter_by(media_id=mediainfo['media_id'])
         try:
             reg = self.session.execute(stmt).scalar_one()
         except:
@@ -71,7 +79,7 @@ class metadata:
         
 
     def markDownloaded(self,mediainfo):
-        stmt = sqlalchemy.select(self.table).filter_by(media_id=mediainfo['media_id'])
+        stmt = sqlalchemy.select(self.mediatable).filter_by(media_id=mediainfo['media_id'])
         with self.session as s:
             reg = s.execute(stmt).scalar_one()
             reg.downloaded = True
@@ -79,5 +87,19 @@ class metadata:
             reg.created_at = datetime.now()
             s.commit()
 
+    def savePost(self,postinfo):
+        stmt = sqlalchemy.select(self.posttable).filter_by(post_id=postinfo['post_id'])
+        with self.session as s:
+            try:
+                check = s.execute(stmt).scalar_one
+                if check.post_id == postinfo['post_id']:
+                    return True
+            except:
+                reg = post_table(
+                    post_id = postinfo['post_id'],
+                    post_text = postinfo['post_text'],
+                    )
+                s.add(reg)
+            s.commit()
 
 

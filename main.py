@@ -5,6 +5,8 @@ from seleniumwire import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support.relative_locator import locate_with
+from selenium.common.exceptions import NoSuchElementException
 from config import settings
 # from tqdm import tqdm
 import requests
@@ -24,16 +26,29 @@ filesTotal = 0
 savedTotal = 0
 # pbar: tqdm
 
-def downloadLinks(links, cookiejar):
+def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
     profilePath = os.path.join(settings.downloaddir, profile)
     os.makedirs(name=profilePath, exist_ok=True)
     metadata = meta.metadata(profilePath)
     metadata.openDatabase()
+    postContent=''
     for l in links:
         href = l.get_attribute('href')
         imageId = l.get_attribute('data-fancybox')
         # print(href)
         # print(imageId)
+        try:
+            postTag = drv.find_element(locate_with(By.XPATH,'//p[@style="white-space: pre-line;margin-bottom: 0;margin-top: -20px;"]').above(l))
+            if postContent != postTag.text:
+                # print(postTag.text)
+                postContent = postTag.text
+                postinfo = {
+                    'post_id': imageId,
+                    'post_text': postContent,
+                }
+                metadata.savePost(postinfo)
+        except NoSuchElementException:
+            pass
         filename = ''
         imgHash = hashlib.md5(str(href).encode('utf-8')).hexdigest()
         if "mp4" in href:
@@ -161,7 +176,7 @@ def main(perfil):
     # print(links)
     # global pbar
     # pbar = tqdm(links,dynamic_ncols=True)
-    downloadLinks(links, jar)
+    downloadLinks(links, jar, driver)
 
     # fetch more posts, 30 at a time
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
@@ -175,7 +190,7 @@ def main(perfil):
             break
         print(f"Buscando mais links... agora em {skip}")
         # pbar.update(filesTotal + len(links))
-        downloadLinks(links, jar)
+        downloadLinks(links, jar, driver)
         skip += 30
     print(f"{savedTotal} novos arquivos salvos, {filesTotal} encontrados no total")
     print("Encerrado.")
