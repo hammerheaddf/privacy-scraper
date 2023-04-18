@@ -91,7 +91,7 @@ class metadata:
         stmt = sqlalchemy.select(self.posttable).filter_by(post_id=postinfo['post_id'])
         with self.session as s:
             try:
-                check = s.execute(stmt).scalar_one
+                check = s.execute(stmt).scalar_one()
                 if check.post_id == postinfo['post_id']:
                     return True
             except:
