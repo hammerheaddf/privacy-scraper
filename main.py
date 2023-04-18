@@ -8,7 +8,6 @@ from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support.relative_locator import locate_with
 from selenium.common.exceptions import NoSuchElementException
 from config import settings
-# from tqdm import tqdm
 import requests
 import os
 import hashlib
@@ -24,14 +23,15 @@ profile = ""
 hdr = ""
 filesTotal = 0
 savedTotal = 0
-# pbar: tqdm
 
 def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
     profilePath = os.path.join(settings.downloaddir, profile)
     os.makedirs(name=profilePath, exist_ok=True)
     metadata = meta.metadata(profilePath)
     metadata.openDatabase()
-    postContent=''
+    postContent = ''
+    mediaCount = 0
+    prevImageId = ''
     for l in links:
         href = l.get_attribute('href')
         imageId = l.get_attribute('data-fancybox')
@@ -50,12 +50,17 @@ def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
         except NoSuchElementException:
             pass
         filename = ''
+        if prevImageId != imageId:
+            mediaCount = 1
+            prevImageId = imageId
         imgHash = hashlib.md5(str(href).encode('utf-8')).hexdigest()
         if "mp4" in href:
-            filename = href.split('/')[-1]
+            # filename = href.split('/')[-1]
+            filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
             media_type = 'video'
         else:
-            filename = imageId + '-' + str(imgHash) + '.jpg'
+            # filename = imageId + '-' + str(imgHash) + '.jpg'
+            filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
             media_type = 'image'
         filepath = os.path.join(settings.downloaddir, profile, media_type)
         os.makedirs(name=filepath, exist_ok=True)
@@ -73,8 +78,6 @@ def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
         if not metadata.checkSaved(mediainfo):
             metadata.saveLinks(mediainfo)
         # print(filename)
-        # global pbar
-        # pbar.set_description("Baixando %s" % (filename))
         if metadata.checkDownloaded(mediainfo) == False:
             req = requests.get(url=href,headers=hdr,cookies=cookiejar)
             # mediainfo['size'] = req.headers['content-length']
@@ -96,6 +99,7 @@ def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
             print(f"{filename} já salvo, pulando...")
         global filesTotal
         filesTotal += 1
+        mediaCount += 1
 
 def refreshCookies(driver):
     # reconstruct Selenium cookie for Requests
@@ -174,8 +178,6 @@ def main(perfil):
     print("Buscando links...")
     links = driver.find_elements(By.XPATH,'//a[contains(@class,"videopostagem")]')
     # print(links)
-    # global pbar
-    # pbar = tqdm(links,dynamic_ncols=True)
     downloadLinks(links, jar, driver)
 
     # fetch more posts, 30 at a time
@@ -189,14 +191,12 @@ def main(perfil):
         if len(links) < 1:
             break
         print(f"Buscando mais links... agora em {skip}")
-        # pbar.update(filesTotal + len(links))
         downloadLinks(links, jar, driver)
         skip += 30
     print(f"{savedTotal} novos arquivos salvos, {filesTotal} encontrados no total")
     print("Encerrado.")
 
     driver.quit()
-    # pbar.close()
 
 if __name__ == "__main__":
     main()
