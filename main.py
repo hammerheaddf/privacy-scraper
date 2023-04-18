@@ -14,6 +14,7 @@ import hashlib
 import datetime as datetime
 import metadata as meta
 import click
+import asyncio
 
 
 url = "https://privacy.com.br/v2/auth/sign-in"
@@ -24,7 +25,7 @@ hdr = ""
 filesTotal = 0
 savedTotal = 0
 
-def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
+async def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
     profilePath = os.path.join(settings.downloaddir, profile)
     os.makedirs(name=profilePath, exist_ok=True)
     metadata = meta.metadata(profilePath)
@@ -79,6 +80,7 @@ def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
             metadata.saveLinks(mediainfo)
         # print(filename)
         if metadata.checkDownloaded(mediainfo) == False:
+            await asyncio.sleep(0)
             req = requests.get(url=href,headers=hdr,cookies=cookiejar)
             # mediainfo['size'] = req.headers['content-length']
             # print(req)
@@ -100,6 +102,7 @@ def downloadLinks(links, cookiejar, drv: webdriver.Firefox):
         global filesTotal
         filesTotal += 1
         mediaCount += 1
+        await asyncio.sleep(0)
 
 def refreshCookies(driver):
     # reconstruct Selenium cookie for Requests
@@ -178,7 +181,11 @@ def main(perfil):
     print("Buscando links...")
     links = driver.find_elements(By.XPATH,'//a[contains(@class,"videopostagem")]')
     # print(links)
-    downloadLinks(links, jar, driver)
+    # task = asyncio.create_task(downloadLinks(links, jar, driver))
+    # await asyncio.wait(task)
+    loop = asyncio.get_event_loop()
+    task = loop.create_task(downloadLinks(links, jar, driver))
+    loop.run_until_complete(task)
 
     # fetch more posts, 30 at a time
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
@@ -191,7 +198,8 @@ def main(perfil):
         if len(links) < 1:
             break
         print(f"Buscando mais links... agora em {skip}")
-        downloadLinks(links, jar, driver)
+        task = loop.create_task(downloadLinks(links, jar, driver))
+        loop.run_until_complete(task)
         skip += 30
     print(f"{savedTotal} novos arquivos salvos, {filesTotal} encontrados no total")
     print("Encerrado.")
@@ -199,4 +207,4 @@ def main(perfil):
     driver.quit()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
