@@ -47,7 +47,7 @@ def fetchLinks(drv: webdriver.Firefox, jar):
     global linkBar
     global linksTotal
     linkBar = tqdm(total=linksTotal,colour='magenta',dynamic_ncols=True,position=1,desc='Mídia...',delay=10)
-    postBar = tqdm(total=numPosts,colour='#FFA500',dynamic_ncols=True,position=0,desc='Postagem...',delay=10)
+    postBar = tqdm(total=numPosts,colour='yellow',dynamic_ncols=True,position=0,desc='Postagem...',delay=10)
     while True:
         jar = refreshCookies(drv)
         page = drv.get(page_url.format(skip, take, profile))
@@ -228,7 +228,11 @@ def main(perfil):
     print(f"Procurando página de postagens do perfil {profile}...")
     global numPosts
     posts = WebDriverWait(driver,90).until(lambda d: d.find_element(By.XPATH,'/html/body/div[6]/div[1]/div/div[5]/div[1]/a'))
-    numPosts = int(posts.text.split(' ')[0].replace('.',''))
+    numPosts = posts.text.split(' ')[0].replace('.','')
+    if 'k' in numPosts:
+        numPosts = numPosts.replace('k','')
+        numPosts = f"{numPosts}000" 
+    numPosts = int(numPosts)
 
     ua = driver.last_request.headers['user-agent'] # 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0'
     global hdr
@@ -256,7 +260,7 @@ def main(perfil):
     proc1.start()
     # fetchLinks(driver,jar)
     global metadata
-    if metadata.getMediaDownloadCount > 0:
+    if metadata.getMediaDownloadCount() > 0:
         print("Baixando mídia...")
         proc2 = multiprocessing.Process(target=downloadLinks(driver,jar))
         processes.append(proc2)
