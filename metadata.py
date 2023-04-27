@@ -102,4 +102,31 @@ class metadata:
                 s.add(reg)
             s.commit()
 
+    def getMedia(self):
+        self.openDatabase()
+        stmt = sqlalchemy.select(self.mediatable)
+        with self.session as s:
+            reg = s.execute(stmt).scalars()
+            return reg
+        
+    def getMediaCount(self):
+        self.openDatabase()
+        stmt = sqlalchemy.select(sqlalchemy.func.count('*')).select_from(self.mediatable)
+        with self.session as s:
+            reg = s.execute(stmt).scalar_one()
+            return reg
+
+    def getMediaDownloadCount(self):
+        self.openDatabase()
+        stmt = sqlalchemy.select(sqlalchemy.func.count('*')).select_from(self.mediatable).filter_by(downloaded = False)
+        with self.session as s:
+            reg = s.execute(stmt).scalar_one()
+            return reg
+
+    def getMediaDownload(self):
+        self.openDatabase()
+        stmt = sqlalchemy.select(self.mediatable).filter_by(downloaded = False)
+        with self.session as s:
+            reg = s.execute(stmt, execution_options={"prebuffer_rows": True}).scalars()
+            return reg
 
