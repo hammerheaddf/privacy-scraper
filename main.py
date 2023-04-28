@@ -67,11 +67,7 @@ def fetchLinks(drv: webdriver.Firefox, jar):
     print(f"{postsTotal} postagens com texto e mídia, {metadata.getMediaCount()} mídias encontradas. Baixando {metadata.getMediaDownloadCount()} mídias.")
     
 async def parseLinks(links, cookiejar, drv: webdriver.Firefox):
-    profilePath = os.path.join(settings.downloaddir, profile)
-    os.makedirs(name=profilePath, exist_ok=True)
-    global metadata
-    metadata = meta.metadata(profilePath)
-    metadata.openDatabase()
+    openDatabase()
     mediaCount = 0
     for l in links:
         href = l.get_attribute('href')
@@ -198,9 +194,24 @@ def disable_images(driver):
     saveButton = WebDriverWait(driver, timeout=30).until(lambda d: d.find_element(By.XPATH,"/html/body/table/tr[1]/td[2]/button"))
     saveButton.click()
 
+def openDatabase():
+    profilePath = os.path.join(settings.downloaddir, profile)
+    os.makedirs(name=profilePath, exist_ok=True)
+    global metadata
+    metadata = meta.metadata(profilePath)
+    metadata.openDatabase()
+
+
 @click.command()
 @click.argument('perfil')
-def main(perfil):
+@click.option(
+    '--backlog',
+    '-b',
+    is_flag=True,
+    default=False,
+    help='Baixa apenas o "backlog" de mídias novas no DB, sem varrer a página'
+    )
+def main(perfil, backlog):
     """Baixa toda a mídia de um dado perfil. Aceita um perfil por vez."""
     global profile
     profile = perfil
@@ -254,12 +265,15 @@ def main(perfil):
     jar = refreshCookies(driver)
 
     processes = []
-    print("Buscando postagens com mídia...")
-    proc1 = multiprocessing.Process(target=fetchLinks(driver,jar))
-    processes.append(proc1)
-    proc1.start()
+    if not backlog:
+        print("Buscando postagens com mídia...")
+        proc1 = multiprocessing.Process(target=fetchLinks(driver,jar))
+        processes.append(proc1)
+        proc1.start()
     # fetchLinks(driver,jar)
     global metadata
+    if type(metadata) == str:
+        openDatabase()
     if metadata.getMediaDownloadCount() > 0:
         print("Baixando mídia...")
         proc2 = multiprocessing.Process(target=downloadLinks(driver,jar))
