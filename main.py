@@ -139,10 +139,10 @@ def downloadLinks(drv, cookiejar):
     asyncio.set_event_loop(loop)
     with tqdm(total=metadata.getMediaDownloadCount(),dynamic_ncols=True,colour='green',desc="Baixando") as downloadBar:
         for media in medias:
-            downloadBar.set_description(f"Baixando {media.filename}")
-            downloadBar.update()
             task = loop.create_task(requestLink(media, drv, cookiejar))
             loop.run_until_complete(task)
+            downloadBar.set_description(f"Baixando {media.filename}")
+            downloadBar.update()
             global filesTotal
             filesTotal += 1
             mediaCount += 1
@@ -270,6 +270,8 @@ def main(perfil, backlog):
         proc1 = multiprocessing.Process(target=fetchLinks(driver,jar))
         processes.append(proc1)
         proc1.start()
+    else:
+        print("Atenção: apenas baixando backlog do banco de dados! A página não vai ser varrida agora.")
     # fetchLinks(driver,jar)
     global metadata
     if type(metadata) == str:
