@@ -223,7 +223,6 @@ def main(perfil, backlog):
     print("Abrindo página de login...")
     driver.get(url)
     user = WebDriverWait(driver, timeout=30).until(lambda d: d.find_element(By.XPATH,'//input[@id="txtEmailLight"]'))
-    # print(user)
     user.send_keys(settings.user)
     sleep(2)
     pwd = WebDriverWait(driver, timeout=30).until(lambda d: d.find_element(By.XPATH,'//input[@id="txtPasswordLight"]'))
