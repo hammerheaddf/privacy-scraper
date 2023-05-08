@@ -1,10 +1,16 @@
 from datetime import datetime
 from typing import cast
 import sqlalchemy
+from sqlalchemy import text
 from sqlalchemy.orm.decl_api import declarative_base
 from sqlalchemy.orm.session import Session
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
+from alembic.autogenerate import produce_migrations
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from alembic.operations.ops import ModifyTableOps
+from sqlalchemy.exc import OperationalError
 
 Base = declarative_base()
 class media_table(Base):
@@ -13,6 +19,7 @@ class media_table(Base):
     media_id: Mapped[int] = mapped_column(sqlalchemy.Integer, unique=True)
     post_id: Mapped[int] = mapped_column(sqlalchemy.Integer, nullable=False)
     link: Mapped[str] = cast(str, mapped_column(sqlalchemy.String))
+    inner_link: Mapped[str] = cast(str, mapped_column(sqlalchemy.String, nullable=True))
     directory: Mapped[str] = cast(str, mapped_column(sqlalchemy.String))
     filename: Mapped[str] = cast(str, mapped_column(sqlalchemy.String))
     size: Mapped[int] = cast(int, mapped_column(sqlalchemy.Integer, default=None))
@@ -38,6 +45,7 @@ class metadata:
     def openDatabase(self):
         self.engine = sqlalchemy.create_engine("sqlite+pysqlite:///{0}".format(self.dbpath))
         self.session = Session(self.engine)
+        self.upgrade()
         self.mediatable = media_table
         self.posttable = post_table
         Base.metadata.create_all(self.engine)
@@ -51,6 +59,7 @@ class metadata:
                 media_id = mediainfo['media_id'],
                 post_id = mediainfo['post_id'],
                 link = mediainfo['link'],
+                inner_link = mediainfo['inner_link'],
                 directory = mediainfo['directory'],
                 filename = mediainfo['filename'],
                 size = mediainfo['size'],
@@ -67,6 +76,10 @@ class metadata:
             reg = self.session.execute(stmt).scalar_one()
         except:
             return False
+        if reg.inner_link == None:
+            with self.session as s:
+                reg.inner_link = mediainfo['inner_link']
+                s.commit()
         return reg
 
     def checkDownloaded(self,mediainfo):
@@ -130,3 +143,24 @@ class metadata:
             reg = s.execute(stmt, execution_options={"prebuffer_rows": True}).scalars()
             return reg
 
+    def upgrade(self):
+        try:
+            check = self.session.execute(text("select inner_link from medias limit 1"))
+        except OperationalError:
+            mc = MigrationContext.configure(self.engine.connect())
+            migrations = produce_migrations(mc, Base.metadata)
+            operations = Operations(mc)
+            use_batch = True
+            stack = [migrations.upgrade_ops]
+            while stack:
+                elem = stack.pop(0)
+                if use_batch and isinstance(elem, ModifyTableOps):
+                    with operations.batch_alter_table(
+                        elem.table_name, schema=elem.schema
+                    ) as batch_ops:
+                        for table_elem in elem.ops:
+                            batch_ops.invoke(table_elem)
+                elif hasattr(elem, "ops"):
+                    stack.extend(elem.ops)
+                else:
+                    operations.invoke(elem)

@@ -2,7 +2,9 @@
 import datetime
 from time import sleep
 from seleniumwire import webdriver
-from selenium.webdriver.firefox.options import Options
+# from selenium.webdriver.firefox.options import Options
+import undetected_chromedriver as uc
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support.relative_locator import locate_with
@@ -19,7 +21,7 @@ import asyncio
 import multiprocessing
 from tqdm import tqdm
 
-url = "https://privacy.com.br/v2/auth/sign-in"
+url = "https://privacy.com.br/"
 base_url = "https://privacy.com.br/profile/"
 page_url = "https://privacy.com.br/Index?handler=PartialPosts&skip={0}&take={1}&nomePerfil={2}&agendado=false"
 profile = ""
@@ -35,7 +37,7 @@ numPosts = 0
 postBar: tqdm
 linkBar: tqdm
 
-def fetchLinks(drv: webdriver.Firefox, jar):
+def fetchLinks(drv: webdriver.Chrome, jar):
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     # busca posts, 30 por vez
@@ -66,12 +68,15 @@ def fetchLinks(drv: webdriver.Firefox, jar):
     global postsTotal
     print(f"{postsTotal} postagens com texto e mídia, {metadata.getMediaCount()} mídias encontradas. Baixando {metadata.getMediaDownloadCount()} mídias.")
     
-async def parseLinks(links, cookiejar, drv: webdriver.Firefox):
+async def parseLinks(links, cookiejar, drv: webdriver.Chrome):
     openDatabase()
     mediaCount = 0
     for l in links:
         href = l.get_attribute('href')
         imageId = l.get_attribute('data-fancybox')
+        inner_link = l.find_element(By.TAG_NAME,'img').get_attribute('src')
+        # if href != inner_link:
+        #     print('break')
         # print(href)
         # print(imageId)
         global prevImageId
@@ -112,6 +117,7 @@ async def parseLinks(links, cookiejar, drv: webdriver.Firefox):
             'media_id': imgHash,
             'post_id': imageId,
             'link': href,
+            'inner_link': inner_link,
             'directory': filepath,
             'filename': filename,
             'size': 0,
@@ -152,9 +158,11 @@ async def requestLink(media, drv, cookiejar):
     mediainfo = {}
     if savedTotal % 200 == 0:
         cookiejar = refreshCookies(drv)
-    req = requests.get(url=media.link,headers=hdr,cookies=cookiejar)
+    req = requests.get(url=media.link,headers=hdr,cookies=cookiejar,stream=True)
     # mediainfo['size'] = req.headers['content-length']
     # print(req)
+    if req.status_code == 413:
+        req = requests.get(url=media.inner_link,headers=hdr,cookies=cookiejar,stream=True)
     if req.status_code == 200:
         saved = 0
         with open(os.path.join(media.directory,media.filename), 'wb') as download:
@@ -170,7 +178,7 @@ async def requestLink(media, drv, cookiejar):
     # print(filesTotal)
     await asyncio.sleep(0)
 
-def refreshCookies(driver: webdriver.Firefox):
+def refreshCookies(driver: webdriver.Chrome):
     # reconstrói cookie do Selenium para Requests
     jar = requests.cookies.RequestsCookieJar()
     driver.refresh()
@@ -218,8 +226,10 @@ def main(perfil, backlog):
     opt = Options()
     opt.add_argument("--headless")
     opt.page_load_strategy = 'eager'
-    driver = webdriver.Firefox(options=opt)
-    disable_images(driver)
+    opt.add_argument('--blink-settings=imagesEnabled=false')
+    driver = uc.Chrome(options=opt)
+    # driver = webdriver.Chrome(options=opt)
+    # disable_images(driver)
     print("Abrindo página de login...")
     driver.get(url)
     user = WebDriverWait(driver, timeout=30).until(lambda d: d.find_element(By.XPATH,'//input[@id="txtEmailLight"]'))
@@ -244,7 +254,8 @@ def main(perfil, backlog):
         numPosts = f"{numPosts}000" 
     numPosts = int(numPosts)
 
-    ua = driver.last_request.headers['user-agent'] # 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0'
+    ua = driver.execute_script("return navigator.userAgent")
+    # ua = driver.last_request.headers['user-agent'] # 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/111.0'
     global hdr
     hdr = {
         'Accept': '*/*',

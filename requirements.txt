@@ -6,3 +6,5 @@ sqlalchemy
 click
 aiosqlite
 tqdm
+undetected_chromedriver
+alembic
