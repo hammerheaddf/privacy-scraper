@@ -32,7 +32,6 @@ postBar: tqdm
 linkBar: tqdm
 
 async def fetchLinks(page: pw.Page, jar):
-    # busca posts, 30 por vez
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
     skip = 0
     take = 40
@@ -69,16 +68,9 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
         id_div = await d.locator('css=div.post-view-full').get_attribute('id')
         imageId = id_div.replace('Postagem','')
         global prevImageId
-        # try:
         if prevImageId != imageId: #postContent != postTag.text:
             postBar.set_description(f"Postagem {imageId}")
             postBar.update()
-            # print(postTag.text)
-            # postTag = page.locator(locate_with(By.XPATH,'//p[@style="white-space: pre-line;margin-bottom: 0;margin-top: -20px;"]').above(l))
-            # div = page.locator('div.card.is-post.my-n2').filter(has=l)
-            # print(await div.get_attribute('class'))
-            # postTag = div.locator('p')
-            # print(await postTag.get_attribute('style'))
             global postContent
             try:
                 await expect(postTag).to_have_count(count=1,timeout=2)
@@ -95,29 +87,20 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
             except AssertionError:
                 pass
     
-        # global linksTotal
         global linkBar
-        # linksTotal += len(links)
-        # linkBar.total = linksTotal
         await asyncio.sleep(0)
         for l in links:
             href = await l.get_attribute('href')
             inner_link = await l.get_by_alt_text('').get_attribute('src')
-            # if href != inner_link:
-            #     print('break')
-            # print(href)
-            # print(imageId)
             filename = ''
             if prevImageId != imageId:
                 mediaCount = 1
                 prevImageId = imageId
             imgHash = hashlib.md5(str(href).encode('utf-8')).hexdigest()
             if "mp4" in href:
-                # filename = href.split('/')[-1]
                 filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
                 media_type = 'video'
             else:
-                # filename = imageId + '-' + str(imgHash) + '.jpg'
                 filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
                 media_type = 'image'
             filepath = os.path.join(settings.downloaddir, profile, media_type)
@@ -149,12 +132,8 @@ async def downloadLinks(drv, cookiejar):
     global metadata
     mediaCount = 0
     medias = metadata.getMediaDownload()
-    # loop = asyncio.new_event_loop()
-    # asyncio.set_event_loop(loop)
     with tqdm(total=metadata.getMediaDownloadCount(),dynamic_ncols=True,colour='green',desc="Baixando") as downloadBar:
         for media in medias:
-            # task = loop.create_task(requestLink(media, drv, cookiejar))
-            # loop.run_until_complete(task)
             await requestLink(media, drv, cookiejar)
             downloadBar.set_description(f"Baixando {media.filename}")
             downloadBar.update()
@@ -189,7 +168,7 @@ async def requestLink(media, drv, cookiejar):
     await asyncio.sleep(0)
 
 async def refreshCookies(driver: pw.Page):
-    # reconstrói cookie do Selenium para Requests
+    # reconstrói cookie do navegador para Requests
     jar = requests.cookies.RequestsCookieJar()
     # await driver.reload()
     for c in await driver.context.cookies():
