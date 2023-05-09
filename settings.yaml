@@ -1,2 +1,4 @@
-driver: firefox
+# chromium ou firefox
+driver: chromium
+
 downloaddir: downloads

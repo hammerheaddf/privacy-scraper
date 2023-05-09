@@ -1,10 +1,10 @@
-selenium
-selenium-wire
+playwright
 dynaconf
 requests
 sqlalchemy
-click
+asyncclick
 aiosqlite
 tqdm
 undetected_chromedriver
 alembic
+anyio
