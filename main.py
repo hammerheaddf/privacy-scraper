@@ -30,6 +30,8 @@ prevImageId = ''
 numPosts = 0
 postBar: tqdm
 linkBar: tqdm
+global barFormat
+barFormat = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}]'
 
 async def fetchLinks(page: pw.Page, jar):
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
@@ -39,8 +41,10 @@ async def fetchLinks(page: pw.Page, jar):
     global postBar
     global linkBar
     global linksTotal
-    linkBar = tqdm(total=linksTotal,colour='magenta',dynamic_ncols=True,position=1,desc='Mídia...',delay=10)
-    postBar = tqdm(total=numPosts,colour='yellow',dynamic_ncols=True,position=0,desc='Postagem...',delay=10)
+    linkBar = tqdm(total=linksTotal,colour='magenta',dynamic_ncols=True,position=1,desc='Mídia...',delay=5,bar_format=barFormat)
+    # linkBarD = tqdm(bar_format='{desc}',position=2,desc='Mídia...')
+    postBar = tqdm(total=numPosts,colour='yellow',dynamic_ncols=True,position=0,desc='Postagem...',delay=5,bar_format=barFormat)
+    # postBarD = tqdm(bar_format='{desc}',position=0,desc='Postagem...')
     while True:
         await page.goto(page_url.format(skip, take, profile))
         jar = await refreshCookies(page)
@@ -52,7 +56,9 @@ async def fetchLinks(page: pw.Page, jar):
         linkBar.total = linksTotal
         await parseLinks(divs, page)
         skip += take
+    # postBarD.close()
     postBar.close()
+    # linkBarD.close()
     linkBar.close()
     global metadata
     global postsTotal
@@ -69,7 +75,7 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
         imageId = id_div.replace('Postagem','')
         global prevImageId
         if prevImageId != imageId: #postContent != postTag.text:
-            postBar.set_description(f"Postagem {imageId}")
+            postBar.set_description(f"Post  {truncate_middle(imageId,12)}")
             postBar.update()
             global postContent
             try:
@@ -87,7 +93,7 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
             except AssertionError:
                 pass
     
-        global linkBar
+        global linkBar, linkBarD
         await asyncio.sleep(0)
         for l in links:
             href = await l.get_attribute('href')
@@ -120,7 +126,7 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
             if not metadata.checkSaved(mediainfo):
                 metadata.saveLinks(mediainfo)
             # print(filename)
-            linkBar.set_description(f"Mídia {filename}")
+            linkBar.set_description(f"Mídia {truncate_middle(filename,12)}")
             linkBar.update()
             mediaCount += 1
             await asyncio.sleep(0)
@@ -132,14 +138,17 @@ async def downloadLinks(drv, cookiejar):
     global metadata
     mediaCount = 0
     medias = metadata.getMediaDownload()
-    with tqdm(total=metadata.getMediaDownloadCount(),dynamic_ncols=True,colour='green',desc="Baixando") as downloadBar:
+    
+    with tqdm(total=metadata.getMediaDownloadCount(),dynamic_ncols=True,colour='green',bar_format=barFormat) as downloadBar:
+        # downloadBarD = tqdm(bar_format='{desc}',position=0,desc='Baixando...')
         for media in medias:
             await requestLink(media, drv, cookiejar)
-            downloadBar.set_description(f"Baixando {media.filename}")
+            downloadBar.set_description(f"{truncate_middle(media.filename,12)}")
             downloadBar.update()
             global filesTotal
             filesTotal += 1
             mediaCount += 1
+        # downloadBarD.close()
 
 async def requestLink(media, drv, cookiejar):
     global savedTotal
@@ -198,6 +207,16 @@ def openDatabase():
     metadata = meta.metadata(profilePath)
     metadata.openDatabase()
 
+def truncate_middle(s, n):
+    if len(s) <= n:
+        # string is already short-enough
+        return s
+    # half of the size, minus the 3 .'s
+    n_2 = int(n / 2 - 3)
+    # whatever's left
+    n_1 = int(n - n_2 - 3)
+    return '{0}...{1}'.format(s[:n_1], s[-n_2:])
+
 
 @click.command()
 @click.argument('perfil')
@@ -219,8 +238,10 @@ async def main(perfil, backlog):
         )
         print("Abrindo página de login...")
         page = await browser.new_page()
+        # await stealth_async(page)
         await page.goto(url)
         # user = await page.locator('xpath=//input[@id="txtEmailLight"]')
+        # await page.screenshot(path="ss.png")
         user = page.get_by_placeholder('E-mail')
         await expect(user).to_be_editable()
         await user.type(settings.user)
@@ -288,7 +309,7 @@ async def main(perfil, backlog):
         for proc in processes:
             proc.join()
 
-        await page.close()
+        await browser.close()
         print('Encerrado.')
 
 if __name__ == "__main__":
