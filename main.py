@@ -28,6 +28,7 @@ metadata = ""
 postContent = ''
 prevImageId = ''
 numPosts = 0
+termCols = 0
 postBar: tqdm
 linkBar: tqdm
 downloadBar: tqdm
@@ -76,7 +77,12 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
         imageId = id_div.replace('Postagem','')
         global prevImageId
         if prevImageId != imageId: #postContent != postTag.text:
-            postBar.set_description(f"Post  {truncate_middle(imageId,12)}")
+            global termCols
+            if termCols < 80:
+                desc = f"P {truncate_middle(imageId,12)}"
+            else:
+                desc = f"Post  {imageId}"
+            postBar.set_description(desc)
             postBar.update()
             global postContent
             try:
@@ -127,7 +133,11 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
             if not metadata.checkSaved(mediainfo):
                 metadata.saveLinks(mediainfo)
             # print(filename)
-            linkBar.set_description(f"Mídia {truncate_middle(filename,12)}")
+            if termCols < 80:
+                desc = f"M {truncate_middle(filename,12)}"
+            else:
+                desc = f"Mídia {filename}"
+            linkBar.set_description(desc)
             linkBar.update()
             mediaCount += 1
             await asyncio.sleep(0)
@@ -165,7 +175,12 @@ async def requestLink(medias, cookiejar):
     while not medias.empty():
         media = await medias.get()
         global downloadBar
-        downloadBar.set_description(f"{truncate_middle(media.filename,12)}")
+        global termCols
+        if termCols < 80:
+            desc = truncate_middle(media.filename,12)
+        else:
+            desc = media.filename
+        downloadBar.set_description(f"{desc}")
         downloadBar.update()
         mediainfo = {}
         async with httpx.AsyncClient() as client:
@@ -244,6 +259,8 @@ def truncate_middle(s, n):
     )
 async def main(perfil, backlog):
     """Baixa toda a mídia de um dado perfil. Aceita um perfil por vez."""
+    global termCols
+    termCols = os.get_terminal_size().columns
     async with pw.async_playwright() as p:
         global profile
         profile = perfil
