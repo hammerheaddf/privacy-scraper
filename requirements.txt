@@ -1,6 +1,6 @@
 playwright
 dynaconf
-requests
+httpx
 sqlalchemy
 asyncclick
 aiosqlite

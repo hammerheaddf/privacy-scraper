@@ -4,7 +4,7 @@ import playwright.async_api as pw
 from playwright.async_api import expect
 from config import settings
 from sqlalchemy.engine.result import ScalarResult
-import requests
+import httpx
 import os
 import hashlib
 import datetime as datetime
@@ -30,6 +30,7 @@ prevImageId = ''
 numPosts = 0
 postBar: tqdm
 linkBar: tqdm
+downloadBar: tqdm
 global barFormat
 barFormat = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}]'
 
@@ -131,59 +132,73 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
             mediaCount += 1
             await asyncio.sleep(0)
         
+async def retrieveLinks(mediastoDownload, medias: asyncio.Queue()):
+    for m in mediastoDownload:
+        await medias.put(m)
+    # return medias
+
 
 async def downloadLinks(drv, cookiejar):
     profilePath = os.path.join(settings.downloaddir, profile)
     os.makedirs(name=profilePath, exist_ok=True)
     global metadata
     mediaCount = 0
-    medias = metadata.getMediaDownload()
-    
+    mediastoDownload = metadata.getMediaDownload()
+    medias = asyncio.Queue()
+
+    global downloadBar
     with tqdm(total=metadata.getMediaDownloadCount(),dynamic_ncols=True,colour='green',bar_format=barFormat) as downloadBar:
         # downloadBarD = tqdm(bar_format='{desc}',position=0,desc='Baixando...')
-        for media in medias:
-            await requestLink(media, drv, cookiejar)
-            downloadBar.set_description(f"{truncate_middle(media.filename,12)}")
-            downloadBar.update()
-            global filesTotal
-            filesTotal += 1
-            mediaCount += 1
+        # while True:
+        global savedTotal
+        if savedTotal>0 and savedTotal % 200 == 0:
+            await drv.reload()
+            cookiejar = await refreshCookies(drv)
+        await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [requestLink(medias, cookiejar) for _ in range(4)]))
+        global filesTotal
+        # filesTotal += 1
+        # mediaCount += 1
+        # medias.task_done()
         # downloadBarD.close()
 
-async def requestLink(media, drv, cookiejar):
-    global savedTotal
-    mediainfo = {}
-    if savedTotal % 200 == 0:
-        await drv.reload()
-        cookiejar = await refreshCookies(drv)
-    req = requests.get(url=media.link,headers=hdr,cookies=cookiejar,stream=True)
-    # mediainfo['size'] = req.headers['content-length']
-    # print(req)
-    if req.status_code == 413:
-        req = requests.get(url=media.inner_link,headers=hdr,cookies=cookiejar,stream=True)
-    if req.status_code == 200:
-        saved = 0
-        with open(os.path.join(media.directory,media.filename), 'wb') as download:
-            saved = download.write(req.content)
-        if saved > 0:
-            mediainfo['media_id'] = media.media_id
-            mediainfo['size'] = saved
-            metadata.markDownloaded(mediainfo)
-            # print(f"{media.filename} {saved} bytes salvo.")
-    else:
-        tqdm.write(f"Download de {media.filename} falhou, HTTP erro {req.status_code}")
-    savedTotal += 1
-    # print(filesTotal)
-    await asyncio.sleep(0)
+async def requestLink(medias, cookiejar):
+    while not medias.empty():
+        media = await medias.get()
+        global downloadBar
+        downloadBar.set_description(f"{truncate_middle(media.filename,12)}")
+        downloadBar.update()
+        mediainfo = {}
+        async with httpx.AsyncClient() as client:
+            req = await client.get(url=media.link,headers=hdr,cookies=cookiejar)
+        # mediainfo['size'] = req.headers['content-length']
+        # print(req)
+        if req.status_code == 413:
+            async with httpx.AsyncClient() as client:
+                req = await client.get(url=media.inner_link,headers=hdr,cookies=cookiejar)
+        if req.status_code == 200:
+            saved = 0
+            with open(os.path.join(media.directory,media.filename), 'wb') as download:
+                saved = download.write(req.content)
+            if saved > 0:
+                mediainfo['media_id'] = media.media_id
+                mediainfo['size'] = saved
+                metadata.markDownloaded(mediainfo)
+                global savedTotal
+                savedTotal += 1
+                # print(f"{media.filename} {saved} bytes salvo.")
+        else:
+            tqdm.write(f"Download de {media.filename} falhou, HTTP erro {req.status_code}")
+        # print(filesTotal)
+        medias.task_done()
 
 async def refreshCookies(driver: pw.Page):
     # reconstrói cookie do navegador para Requests
-    jar = requests.cookies.RequestsCookieJar()
+    jar = httpx.Cookies()
     # await driver.reload()
     for c in await driver.context.cookies():
         # print(type(c))
         # print(c['name'])
-        jar.set(c['name'], c['value'], path=c['path'], domain=c['domain'], secure=c['secure']) #, httpOnly=c['httpOnly'], sameSite=c['sameSite'])
+        jar.set(c['name'], c['value'], path=c['path'], domain=c['domain'])#, secure=c['secure']) #, httpOnly=c['httpOnly'], sameSite=c['sameSite'])
     return jar
 
 #DISABLE IMAGES ON FIREFOX
