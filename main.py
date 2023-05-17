@@ -184,12 +184,13 @@ async def requestLink(medias, cookiejar):
         downloadBar.update()
         mediainfo = {}
         async with httpx.AsyncClient() as client:
-            req = await client.get(url=media.link,headers=hdr,cookies=cookiejar)
+            timeout = httpx.Timeout(10.0, read=60.0)
+            req = await client.get(url=media.link,headers=hdr,cookies=cookiejar,timeout=timeout)
         # mediainfo['size'] = req.headers['content-length']
         # print(req)
         if req.status_code == 413:
             async with httpx.AsyncClient() as client:
-                req = await client.get(url=media.inner_link,headers=hdr,cookies=cookiejar)
+                req = await client.get(url=media.inner_link,headers=hdr,cookies=cookiejar,timeout=timeout)
         if req.status_code == 200:
             saved = 0
             with open(os.path.join(media.directory,media.filename), 'wb') as download:
