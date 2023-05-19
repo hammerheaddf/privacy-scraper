@@ -97,7 +97,7 @@ class metadata:
             reg = s.execute(stmt).scalar_one()
             reg.downloaded = True
             reg.size = mediainfo['size']
-            reg.created_at = datetime.now()
+            reg.created_at = mediainfo['created_at']
             s.commit()
 
     def savePost(self,postinfo):

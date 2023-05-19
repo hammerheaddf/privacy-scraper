@@ -2,6 +2,7 @@ import datetime
 from time import sleep
 import playwright.async_api as pw
 from playwright.async_api import expect
+from playwright_stealth import stealth_async
 from config import settings
 from sqlalchemy.engine.result import ScalarResult
 import httpx
@@ -14,6 +15,8 @@ import asyncio
 import multiprocessing
 from tqdm.asyncio import tqdm
 import re
+from dateutil.parser import parse
+import time
 
 url = "https://privacy.com.br/"
 base_url = "https://privacy.com.br/profile/"
@@ -142,12 +145,6 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
             mediaCount += 1
             await asyncio.sleep(0)
         
-async def retrieveLinks(mediastoDownload, medias: asyncio.Queue()):
-    for m in mediastoDownload:
-        await medias.put(m)
-    # return medias
-
-
 async def downloadLinks(drv, cookiejar):
     profilePath = os.path.join(settings.downloaddir, profile)
     os.makedirs(name=profilePath, exist_ok=True)
@@ -156,20 +153,73 @@ async def downloadLinks(drv, cookiejar):
     mediastoDownload = metadata.getMediaDownload()
     medias = asyncio.Queue()
 
+    async with httpx.AsyncClient() as client:
+        tasks = []
+        for m in mediastoDownload:
+            link = m.link
+            task = asyncio.ensure_future(
+                client.request('HEAD',link,headers=hdr,cookies=cookiejar)
+            )
+            tasks.append(task)
+        responses = await asyncio.gather(*tasks)
+        tasks.clear()
+        
+        async def check(media, response):
+            filepath = os.path.join(media.directory, media.filename)
+            response_status = False
+            if response.status_code == 200:
+                response_status = True
+                if response.headers.get('content-length'):
+                    media.size = int(response.headers.get('content-length'))
+            if os.path.exists(filepath):
+                if os.path.getsize(filepath) == response.headers.get('content-length'):
+                    media.downloaded = True
+                else:
+                    return media
+            else:
+                if response_status:
+                    return media
+                
+        mediastoDownload = metadata.getMediaDownload()
+        for media in mediastoDownload:
+            temp_response = [
+                response
+                for response in responses
+                if response and str(response.url) == media.link
+                ]
+            if temp_response:
+                temp_response = temp_response[0]
+                task = check(media, temp_response)
+                tasks.append(task)
+        results = await asyncio.gather(*tasks)
+        metadata.session.commit()
+        medialist = [x for x in results if x]
+        tasks.clear()
+
+    mediastoDownload = metadata.getMediaDownload()
     global downloadBar
-    with tqdm(total=metadata.getMediaDownloadCount(),dynamic_ncols=True,colour='green',bar_format=barFormat) as downloadBar:
+    with tqdm(dynamic_ncols=True,colour='green',bar_format=barFormat,unit='B',unit_scale=True,miniters=1) as downloadBar:
         # downloadBarD = tqdm(bar_format='{desc}',position=0,desc='Baixando...')
         # while True:
+        total = 0
+        for x in medialist:
+            total += int(x.size)
+        downloadBar.total = total*1.001
         global savedTotal
         if savedTotal>0 and savedTotal % 200 == 0:
             await drv.reload()
             cookiejar = await refreshCookies(drv)
         await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [requestLink(medias, cookiejar) for _ in range(4)]))
-        global filesTotal
+        # global filesTotal
         # filesTotal += 1
         # mediaCount += 1
         # medias.task_done()
         # downloadBarD.close()
+
+async def retrieveLinks(mediastoDownload, medias: asyncio.Queue()):
+    for m in mediastoDownload:
+        await medias.put(m)
+    # return medias
 
 async def requestLink(medias, cookiejar):
     while not medias.empty():
@@ -183,29 +233,43 @@ async def requestLink(medias, cookiejar):
         downloadBar.set_description(f"{desc}")
         downloadBar.update()
         mediainfo = {}
-        async with httpx.AsyncClient() as client:
-            timeout = httpx.Timeout(10.0, read=60.0)
-            req = await client.get(url=media.link,headers=hdr,cookies=cookiejar,timeout=timeout)
-        # mediainfo['size'] = req.headers['content-length']
-        # print(req)
-        if req.status_code == 413:
-            async with httpx.AsyncClient() as client:
-                req = await client.get(url=media.inner_link,headers=hdr,cookies=cookiejar,timeout=timeout)
-        if req.status_code == 200:
-            saved = 0
-            with open(os.path.join(media.directory,media.filename), 'wb') as download:
-                saved = download.write(req.content)
-            if saved > 0:
-                mediainfo['media_id'] = media.media_id
-                mediainfo['size'] = saved
-                metadata.markDownloaded(mediainfo)
-                global savedTotal
-                savedTotal += 1
-                # print(f"{media.filename} {saved} bytes salvo.")
-        else:
-            tqdm.write(f"Download de {media.filename} falhou, HTTP erro {req.status_code}")
-        # print(filesTotal)
-        medias.task_done()
+        client = httpx.AsyncClient()
+        timeout = httpx.Timeout(10.0, read=60.0)
+        async with client.stream('GET',url=media.link,headers=hdr,cookies=cookiejar,timeout=timeout) as req:
+            if req.status_code == 413:
+                req = await client.stream('GET',url=media.inner_link,headers=hdr,cookies=cookiejar,timeout=timeout)
+            if req.status_code == 200:
+                saved = 0
+                global filesTotal
+                if int(req.headers['Content-Length']) < 100000000: #100MB
+                    await req.aread()
+                    with open(os.path.join(media.directory,media.filename), 'wb') as download:
+                        saved = download.write(req.content)
+                    filesTotal += saved
+                    downloadBar.update(saved)
+                else:
+                    with open(os.path.join(media.directory,media.filename), 'wb') as download:
+                        async for chunk in req.aiter_bytes():
+                            f = download.write(chunk)
+                            saved += f
+                            downloadBar.update(f)
+                        filesTotal += f
+
+                if saved > 0:
+                    date = parse(req.headers['last-modified'])
+                    mtime = time.mktime(date.timetuple())
+                    os.utime(os.path.join(media.directory,media.filename),(mtime,mtime))
+                    mediainfo['media_id'] = media.media_id
+                    mediainfo['size'] = os.path.getsize(os.path.join(media.directory,media.filename))
+                    mediainfo['created_at'] = date
+                    metadata.markDownloaded(mediainfo)
+                    global savedTotal
+                    savedTotal += 1
+                    # print(f"{media.filename} {saved} bytes salvo.")
+            else:
+                tqdm.write(f"Download de {media.filename} falhou, HTTP erro {req.status_code}")
+            # print(filesTotal)
+            medias.task_done()
 
 async def refreshCookies(driver: pw.Page):
     # reconstrói cookie do navegador para Requests
@@ -271,7 +335,10 @@ async def main(perfil, backlog):
         )
         print("Abrindo página de login...")
         page = await browser.new_page()
+        # await page.set_viewport_size({"width": 1024, "height": 768})
         # await stealth_async(page)
+        await page.goto('about:blank')
+        sleep(5)
         await page.goto(url)
         # user = await page.locator('xpath=//input[@id="txtEmailLight"]')
         # await page.screenshot(path="ss.png")
