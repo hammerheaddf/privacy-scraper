@@ -230,11 +230,11 @@ async def requestLink(medias, cookiejar):
             for response in responses
             if response and str(response.url) == media.link
         ]
+        url = media.link
         if temp_response:
             temp_response = temp_response[0]
-        url = media.link
-        if temp_response.status_code == 413:
-            url = media.inner_link
+            if temp_response.status_code == 413:
+                url = media.inner_link
 
         async with client.stream('GET',url=url,headers=hdr,cookies=cookiejar,timeout=timeout) as req:
             if req.status_code == 200:
