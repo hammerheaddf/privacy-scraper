@@ -2,7 +2,7 @@ import datetime
 from time import sleep
 import playwright.async_api as pw
 from playwright.async_api import expect
-from playwright_stealth import stealth_async
+# from playwright_stealth import stealth_async
 from config import settings
 from sqlalchemy.engine.result import ScalarResult
 import httpx

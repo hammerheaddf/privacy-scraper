@@ -8,4 +8,3 @@ tqdm
 alembic
 anyio
 python-dateutil
-playwright-stealth
