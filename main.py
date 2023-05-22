@@ -32,6 +32,7 @@ postContent = ''
 prevImageId = ''
 numPosts = 0
 termCols = 0
+responses = ''
 postBar: tqdm
 linkBar: tqdm
 downloadBar: tqdm
@@ -47,9 +48,7 @@ async def fetchLinks(page: pw.Page, jar):
     global linkBar
     global linksTotal
     linkBar = tqdm(total=linksTotal,colour='magenta',dynamic_ncols=True,position=1,desc='Mídia...',delay=5,bar_format=barFormat)
-    # linkBarD = tqdm(bar_format='{desc}',position=2,desc='Mídia...')
     postBar = tqdm(total=numPosts,colour='yellow',dynamic_ncols=True,position=0,desc='Postagem...',delay=5,bar_format=barFormat)
-    # postBarD = tqdm(bar_format='{desc}',position=0,desc='Postagem...')
     while True:
         await page.goto(page_url.format(skip, take, profile))
         jar = await refreshCookies(page)
@@ -61,9 +60,7 @@ async def fetchLinks(page: pw.Page, jar):
         linkBar.total = linksTotal
         await parseLinks(divs, page)
         skip += take
-    # postBarD.close()
     postBar.close()
-    # linkBarD.close()
     linkBar.close()
     global metadata
     global postsTotal
@@ -75,7 +72,6 @@ async def parseLinks(divs: list[pw.Locator], page: pw.Page):
     for d in divs:
         links = await d.locator('xpath=//a[contains(@class,"videopostagem")]').all()
         postTag = d.get_by_role('paragraph')
-        # imageId = await d.get_by_role('link').nth(-1).get_attribute('data-fancybox')
         id_div = await d.locator('css=div.post-view-full').get_attribute('id')
         imageId = id_div.replace('Postagem','')
         global prevImageId
@@ -161,6 +157,7 @@ async def downloadLinks(drv, cookiejar):
                 client.request('HEAD',link,headers=hdr,cookies=cookiejar)
             )
             tasks.append(task)
+        global responses
         responses = await asyncio.gather(*tasks)
         tasks.clear()
         
@@ -199,8 +196,6 @@ async def downloadLinks(drv, cookiejar):
     mediastoDownload = metadata.getMediaDownload()
     global downloadBar
     with tqdm(dynamic_ncols=True,colour='green',bar_format=barFormat,unit='B',unit_scale=True,miniters=1) as downloadBar:
-        # downloadBarD = tqdm(bar_format='{desc}',position=0,desc='Baixando...')
-        # while True:
         total = 0
         for x in medialist:
             total += int(x.size)
@@ -210,16 +205,10 @@ async def downloadLinks(drv, cookiejar):
             await drv.reload()
             cookiejar = await refreshCookies(drv)
         await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [requestLink(medias, cookiejar) for _ in range(4)]))
-        # global filesTotal
-        # filesTotal += 1
-        # mediaCount += 1
-        # medias.task_done()
-        # downloadBarD.close()
 
 async def retrieveLinks(mediastoDownload, medias: asyncio.Queue()):
     for m in mediastoDownload:
         await medias.put(m)
-    # return medias
 
 async def requestLink(medias, cookiejar):
     while not medias.empty():
@@ -235,9 +224,19 @@ async def requestLink(medias, cookiejar):
         mediainfo = {}
         client = httpx.AsyncClient()
         timeout = httpx.Timeout(10.0, read=60.0)
-        async with client.stream('GET',url=media.link,headers=hdr,cookies=cookiejar,timeout=timeout) as req:
-            if req.status_code == 413:
-                req = await client.stream('GET',url=media.inner_link,headers=hdr,cookies=cookiejar,timeout=timeout)
+        global responses
+        temp_response = [
+            response
+            for response in responses
+            if response and str(response.url) == media.link
+        ]
+        if temp_response:
+            temp_response = temp_response[0]
+        url = media.link
+        if temp_response.status_code == 413:
+            url = media.inner_link
+
+        async with client.stream('GET',url=url,headers=hdr,cookies=cookiejar,timeout=timeout) as req:
             if req.status_code == 200:
                 saved = 0
                 global filesTotal
@@ -335,18 +334,15 @@ async def main(perfil, backlog):
         )
         print("Abrindo página de login...")
         page = await browser.new_page()
-        # await page.set_viewport_size({"width": 1024, "height": 768})
         # await stealth_async(page)
         await page.goto('about:blank')
-        sleep(5)
+        sleep(2)
         await page.goto(url)
-        # user = await page.locator('xpath=//input[@id="txtEmailLight"]')
         # await page.screenshot(path="ss.png")
         user = page.get_by_placeholder('E-mail')
         await expect(user).to_be_editable()
         await user.type(settings.user)
         sleep(1)
-        # pwd = await page.locator('xpath=//input[@id="txtPasswordLight"]')
         pwd = page.get_by_placeholder('Senha')
         await expect(pwd).to_be_editable()
         await pwd.type(settings.pwd)
