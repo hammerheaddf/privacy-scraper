@@ -153,45 +153,69 @@ async def downloadLinks(drv, cookiejar):
         tasks = []
         for m in mediastoDownload:
             link = m.link
+            timeout = httpx.Timeout(10.0, read=60.0)
             task = asyncio.ensure_future(
-                client.request('HEAD',link,headers=hdr,cookies=cookiejar)
+                client.request('HEAD',link,headers=hdr,cookies=cookiejar,timeout=timeout)
             )
             tasks.append(task)
+        print("Verificando cabeçalhos de mídia...")
         global responses
-        responses = await asyncio.gather(*tasks)
+        responses = await tqdm.gather(*tasks,colour='blue',dynamic_ncols=True,bar_format=barFormat)
         tasks.clear()
         
         async def check(media, response):
-            filepath = os.path.join(media.directory, media.filename)
+            # filepath = os.path.join(media.directory, media.filename)
             response_status = False
             if response.status_code == 200:
                 response_status = True
                 if response.headers.get('content-length'):
                     media.size = int(response.headers.get('content-length'))
-            if os.path.exists(filepath):
-                if os.path.getsize(filepath) == response.headers.get('content-length'):
-                    media.downloaded = True
-                else:
-                    return media
-            else:
+            # if os.path.exists(filepath):
+            #     if os.path.getsize(filepath) == response.headers.get('content-length'):
+            #         media.downloaded = True
+            #     else:
+            #         return media
+            # else:
                 if response_status:
                     return media
                 
         mediastoDownload = metadata.getMediaDownload()
-        for media in mediastoDownload:
-            temp_response = [
-                response
-                for response in responses
-                if response and str(response.url) == media.link
-                ]
-            if temp_response:
-                temp_response = temp_response[0]
-                task = check(media, temp_response)
-                tasks.append(task)
-        results = await asyncio.gather(*tasks)
+        async def checkLink(m,r):
+            while not m.empty():
+                media = await m.get()
+                temp_response = [
+                    response
+                    for response in r
+                    if response and str(response.url) == media.link
+                    ]
+                if temp_response:
+                    temp_response = temp_response[0]
+                    ret = await check(media, temp_response)
+                    mdBar.update()
+                    medias.task_done()
+                    return ret
+
+        print('Lendo metadados...')
+        # for media in tqdm(mediastoDownload,colour='blue',dynamic_ncols=True,bar_format=barFormat):
+        #     temp_response = [
+        #         response
+        #         for response in responses
+        #         if response and str(response.url) == media.link
+        #         ]
+        #     if temp_response:
+        #         temp_response = temp_response[0]
+        #         task = check(media, temp_response)
+        #         tasks.append(task)
+        # results = await tqdm.gather(*tasks,colour='blue',dynamic_ncols=True,bar_format=barFormat)
         metadata.session.commit()
-        medialist = [x for x in results if x]
-        tasks.clear()
+        # tasks.clear()
+    
+        global mdBar
+        total = metadata.getMediaDownloadCount()
+        with tqdm(total=total,colour='blue',dynamic_ncols=True,bar_format=barFormat) as mdBar:
+            results = await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [checkLink(medias,responses) for _ in range(total)]))
+            medialist = [x for x in results if x]
+            mdBar.close()
 
     mediastoDownload = metadata.getMediaDownload()
     global downloadBar
@@ -201,9 +225,10 @@ async def downloadLinks(drv, cookiejar):
             total += int(x.size)
         downloadBar.total = total*1.001
         global savedTotal
-        if savedTotal>0 and savedTotal % 200 == 0:
+        if (savedTotal>0 and savedTotal % 200 == 0) or len(medialist) > 1000:
             await drv.reload()
             cookiejar = await refreshCookies(drv)
+        print("Baixando mídia...")
         await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [requestLink(medias, cookiejar) for _ in range(4)]))
 
 async def retrieveLinks(mediastoDownload, medias: asyncio.Queue()):
@@ -396,7 +421,6 @@ async def main(perfil, backlog):
         if type(metadata) == str:
             openDatabase()
         if metadata.getMediaDownloadCount() > 0:
-            print("Baixando mídia...")
             proc2 = multiprocessing.Process(target=await downloadLinks(page,jar))
             processes.append(proc2)
             proc2.start()
