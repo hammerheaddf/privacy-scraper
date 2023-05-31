@@ -50,7 +50,7 @@ async def fetchLinks(page: pw.Page, jar):
     linkBar = tqdm(total=linksTotal,colour='magenta',dynamic_ncols=True,position=1,desc='Mídia...',delay=5,bar_format=barFormat)
     postBar = tqdm(total=numPosts,colour='yellow',dynamic_ncols=True,position=0,desc='Postagem...',delay=5,bar_format=barFormat)
     while True:
-        await page.goto(page_url.format(skip, take, profile))
+        await page.goto(page_url.format(skip, take, profile),timeout=90000)
         jar = await refreshCookies(page)
         divs = await page.locator('div.card.is-post.my-n2').all()
         links = await page.locator('xpath=//a[contains(@class,"videopostagem")]').all()
