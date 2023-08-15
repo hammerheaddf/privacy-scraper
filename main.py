@@ -381,7 +381,7 @@ async def main(perfil, backlog):
         #procura aba (link) de postagens
         print(f"Procurando página de postagens do perfil {profile}...")
         global numPosts
-        posts = await page.locator('xpath=/html/body/div[6]/div[1]/div/div[5]/div[1]/a').text_content()
+        posts = await page.locator('xpath=/html/body/div[7]/div[1]/div/div[5]/div[1]/a').text_content()
         numPosts = posts.strip().split(' ')[0].replace('.','')
         if 'k' in numPosts:
             numPosts = numPosts.replace('k','')
