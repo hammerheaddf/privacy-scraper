@@ -42,7 +42,7 @@ barFormat = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}]'
 async def fetchLinks(page: pw.Page, jar):
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
     skip = 0
-    take = 40
+    take = 50
     global numPosts
     global postBar
     global linkBar
@@ -223,7 +223,7 @@ async def downloadLinks(drv, cookiejar):
         total = 0
         for x in medialist:
             total += int(x.size)
-        downloadBar.total = total*1.001
+        downloadBar.total = int(total*1.00001)
         global savedTotal
         if (savedTotal>0 and savedTotal % 200 == 0) or len(medialist) > 1000:
             await drv.reload()
@@ -265,7 +265,7 @@ async def requestLink(medias, cookiejar):
             if req.status_code == 200:
                 saved = 0
                 global filesTotal
-                if int(req.headers['Content-Length']) < 100000000: #100MB
+                if int(req.headers['Content-Length']) < 10000000: #10MB
                     await req.aread()
                     with open(os.path.join(media.directory,media.filename), 'wb') as download:
                         saved = download.write(req.content)
