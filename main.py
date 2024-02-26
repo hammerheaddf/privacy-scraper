@@ -52,13 +52,13 @@ async def fetchLinks(page: pw.Page, jar):
     while True:
         await page.goto(page_url.format(skip, take, profile),timeout=90000)
         jar = await refreshCookies(page)
-        divs = await page.locator('div.card.is-post.my-n2').all()
-        links = await page.locator('xpath=//a[contains(@class,"videopostagem")]').all()
+        divs = await page.locator('div.card.pb-0.is-post').all()
+        links = await page.locator('xpath=//div[contains(@class,"post-view-full")]').all()
         if len(divs) < 1:
             break
         linksTotal += len(links)
         linkBar.total = linksTotal
-        await parseLinks(divs, page)
+        await parseLinks(divs)
         skip += take
     postBar.close()
     linkBar.close()
@@ -66,7 +66,7 @@ async def fetchLinks(page: pw.Page, jar):
     global postsTotal
     print(f"{postsTotal} postagens com texto e mídia, {metadata.getMediaCount()} mídias encontradas. Baixando {metadata.getMediaDownloadCount()} mídias.")
     
-async def parseLinks(divs: list[pw.Locator], page: pw.Page):
+async def parseLinks(divs):
     openDatabase()
     mediaCount = 0
     for d in divs:
@@ -381,7 +381,9 @@ async def main(perfil, backlog):
         #procura aba (link) de postagens
         print(f"Procurando página de postagens do perfil {profile}...")
         global numPosts
-        posts = await page.locator('xpath=/html/body/div[7]/div[1]/div/div[5]/div[1]/a').text_content()
+        #posts = await page.locator('xpath=/html/body/div[7]/div[1]/div/div[5]/div[1]/a').text_content()
+        posts = await page.locator('xpath=/html/body/div[8]/div[1]/div/div[5]/div[1]/a').text_content()
+
         numPosts = posts.strip().split(' ')[0].replace('.','')
         if 'k' in numPosts:
             numPosts = numPosts.replace('k','')
