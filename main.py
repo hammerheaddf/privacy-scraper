@@ -21,6 +21,7 @@ import time
 url = "https://privacy.com.br/"
 base_url = "https://privacy.com.br/profile/"
 page_url = "https://privacy.com.br/Index?handler=PartialPosts&skip={0}&take={1}&nomePerfil={2}&agendado=false"
+following_url = "https://privacy.com.br/Follow?Type=Following"
 profile = ""
 hdr = ""
 filesTotal = 0
@@ -38,6 +39,68 @@ linkBar: tqdm
 downloadBar: tqdm
 global barFormat
 barFormat = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}]'
+
+# Funcao para mostrar os nomes dos perfis e numeros
+def display_profiles(profile_names):
+    print("Perfis:")
+    for i, profile_name in enumerate(profile_names):
+        print(f"{i + 1}. {profile_name}")
+
+async def fetch_profiles(page: pw.Page, profile, backlog):
+    await page.goto(base_url + profile)
+    #procura aba (link) de postagens
+    print(f"Procurando página de postagens do perfil {profile}...")
+    global numPosts
+    #posts = await page.locator('xpath=/html/body/div[7]/div[1]/div/div[5]/div[1]/a').text_content()
+    posts = await page.locator('xpath=/html/body/div[8]/div[1]/div/div[5]/div[1]/a').text_content()
+
+    numPosts = posts.strip().split(' ')[0].replace('.','')
+    if 'k' in numPosts:
+        numPosts = numPosts.replace('k','')
+        numPosts = f"{numPosts}000" 
+    numPosts = int(numPosts)
+
+    js = await page.evaluate_handle('navigator')
+    ua = await js.evaluate('navigator.userAgent')
+    global hdr
+    hdr = {
+        'Accept': '*/*',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'pt-BR,pt;q=0.8,en-US;q=0.5,en;q=0.3',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Pragma': 'no-cache',
+        'Sec-Fetch-Dest': 'empty',
+        'Sec-Fetch-Mode': 'no-cors',
+        'Sec-Fetch-Site': 'cross-site',
+        'User-Agent': str(ua),
+        'origin': 'https://privacy.com.br',
+        'Referer': 'https://privacy.com.br'
+    }
+
+    jar = await refreshCookies(page)
+
+    processes = []
+    if not backlog:
+        print("Buscando postagens com mídia...")
+        proc1 = multiprocessing.Process(target=await fetchLinks(page,jar))
+        processes.append(proc1)
+        proc1.start()
+    else:
+        print("Atenção: apenas baixando backlog do banco de dados! A página não vai ser varrida agora.")
+    # fetchLinks(driver,jar)
+    global metadata
+    if type(metadata) == str:
+        openDatabase()
+    if metadata.getMediaDownloadCount() > 0:
+        proc2 = multiprocessing.Process(target=await downloadLinks(page,jar))
+        processes.append(proc2)
+        proc2.start()
+    else:
+        print('Sem mídia para baixar.')
+    for proc in processes:
+        proc.join()
+
 
 async def fetchLinks(page: pw.Page, jar):
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
@@ -338,7 +401,6 @@ def truncate_middle(s, n):
 
 
 @click.command()
-@click.argument('perfil')
 @click.option(
     '--backlog',
     '-b',
@@ -346,13 +408,12 @@ def truncate_middle(s, n):
     default=False,
     help='Baixa apenas o "backlog" de mídias novas no DB, sem varrer a página'
     )
-async def main(perfil, backlog):
-    """Baixa toda a mídia de um dado perfil. Aceita um perfil por vez."""
+async def main(backlog):
+    """Baixa toda a mídia seguida, aceita todos os perfis ou cada um individual."""
     global termCols
     termCols = os.get_terminal_size().columns
     async with pw.async_playwright() as p:
         global profile
-        profile = perfil
         browser = await p.chromium.launch(
             args=['--blink-settings=imagesEnabled=false'],
             headless=False
@@ -376,63 +437,33 @@ async def main(perfil, backlog):
         await btn.click()
         # procura avatar do usuário
         print("Aguardando autenticação...")
-        await expect(page.get_by_placeholder('Pesquise aqui...')).to_be_visible(timeout=90000)
-        await page.goto(base_url + profile)
-        #procura aba (link) de postagens
-        print(f"Procurando página de postagens do perfil {profile}...")
-        global numPosts
-        #posts = await page.locator('xpath=/html/body/div[7]/div[1]/div/div[5]/div[1]/a').text_content()
-        posts = await page.locator('xpath=/html/body/div[8]/div[1]/div/div[5]/div[1]/a').text_content()
+        await expect(page.get_by_placeholder('Pesquise aqui...')).   to_be_visible(timeout=90000)
+        
+        #entrando na pagina do perfil para verificar os perfis seguidos
+        await page.goto(following_url)
+        sleep(5)
 
-        numPosts = posts.strip().split(' ')[0].replace('.','')
-        if 'k' in numPosts:
-            numPosts = numPosts.replace('k','')
-            numPosts = f"{numPosts}000" 
-        numPosts = int(numPosts)
+        profile_links = await page.locator('a[href^="https://privacy.com.br/profile/"]').evaluate_all('(links) => links.map(link => link.href)')
+        
+        # Extrai o nome dos perfis da pagina de seguindo do usuario
+        profile_names_set = set(link.split('/')[-1] for link in profile_links)
+        profile_names = list(profile_names_set)
+        
+        display_profiles(profile_names)
 
-        js = await page.evaluate_handle('navigator')
-        ua = await js.evaluate('navigator.userAgent')
-        global hdr
-        hdr = {
-            'Accept': '*/*',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Accept-Language': 'pt-BR,pt;q=0.8,en-US;q=0.5,en;q=0.3',
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'Pragma': 'no-cache',
-            'Sec-Fetch-Dest': 'empty',
-            'Sec-Fetch-Mode': 'no-cors',
-            'Sec-Fetch-Site': 'cross-site',
-            'User-Agent': str(ua),
-            'origin': 'https://privacy.com.br',
-            'Referer': 'https://privacy.com.br'
-        }
-
-        jar = await refreshCookies(page)
-
-        processes = []
-        if not backlog:
-            print("Buscando postagens com mídia...")
-            proc1 = multiprocessing.Process(target=await fetchLinks(page,jar))
-            processes.append(proc1)
-            proc1.start()
-        else:
-            print("Atenção: apenas baixando backlog do banco de dados! A página não vai ser varrida agora.")
-        # fetchLinks(driver,jar)
-        global metadata
-        if type(metadata) == str:
-            openDatabase()
-        if metadata.getMediaDownloadCount() > 0:
-            proc2 = multiprocessing.Process(target=await downloadLinks(page,jar))
-            processes.append(proc2)
-            proc2.start()
-        else:
-            print('Sem mídia para baixar.')
-        for proc in processes:
-            proc.join()
-
+        # Pede para o utilizador escolher um perfil
+        selection = input("Entre com o numero do perfil correspondente que queira baixar. (0 para todos os perfis): ")        
+        
+        if selection == "0":
+            for profile in profile_names:
+                await fetch_profiles(page, profile, backlog)
+        elif selection.isdigit() and 0 < int(selection) <= len(profile_names):
+            selected_profile = profile_names[int(selection) - 1]
+            await fetch_profiles(page, selected_profile, backlog)
+        
         await browser.close()
         print('Encerrado.')
+
 
 if __name__ == "__main__":
     asyncio.run(main())
