@@ -116,7 +116,7 @@ async def fetchLinks(page: pw.Page, jar):
         await page.goto(page_url.format(skip, take, profile),timeout=90000)
         jar = await refreshCookies(page)
         divs = await page.locator('div.card.pb-0.is-post').all()
-        links = await page.locator('xpath=//div[contains(@class,"post-view-full")]').all()
+        links = await page.locator('xpath=//div[contains(@class,"carousel-skeleton-loader")]').all()
         if len(divs) < 1:
             break
         linksTotal += len(links)
@@ -133,7 +133,10 @@ async def parseLinks(divs):
     openDatabase()
     mediaCount = 0
     for d in divs:
-        links = await d.locator('xpath=//a[contains(@class,"videopostagem")]').all()
+        privacy_web_mediahub_carousel = await d.locator('//privacy-web-mediahub-carousel').all()
+        if privacy_web_mediahub_carousel:
+            for carousel_element in privacy_web_mediahub_carousel:
+                link = await carousel_element.evaluate('(element) => element.getAttribute("medias")')                                    
         postTag = d.get_by_role('paragraph')
         id_div = await d.locator('css=div.post-view-full').get_attribute('id')
         imageId = id_div.replace('Postagem','')
@@ -164,45 +167,45 @@ async def parseLinks(divs):
     
         global linkBar, linkBarD
         await asyncio.sleep(0)
-        for l in links:
-            href = await l.get_attribute('href')
-            inner_link = await l.get_by_alt_text('').get_attribute('src')
-            filename = ''
-            if prevImageId != imageId:
-                mediaCount = 1
-                prevImageId = imageId
-            imgHash = hashlib.md5(str(href).encode('utf-8')).hexdigest()
-            if "mp4" in href:
-                filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
-                media_type = 'video'
-            else:
-                filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
-                media_type = 'image'
-            filepath = os.path.join(settings.downloaddir, profile, media_type)
-            os.makedirs(name=filepath, exist_ok=True)
-            mediainfo = {
-                'media_id': imgHash,
-                'post_id': imageId,
-                'link': href,
-                'inner_link': inner_link,
-                'directory': filepath,
-                'filename': filename,
-                'size': 0,
-                'media_type': media_type,
-                'downloaded': False,
-                'created_at': datetime.datetime.now()
-            }
-            if not metadata.checkSaved(mediainfo):
-                metadata.saveLinks(mediainfo)
-            # print(filename)
-            if termCols < 80:
-                desc = f"M {truncate_middle(filename,12)}"
-            else:
-                desc = f"Mídia {filename}"
-            linkBar.set_description(desc)
-            linkBar.update()
-            mediaCount += 1
-            await asyncio.sleep(0)
+        
+        media_type = re.search(r'"type":"([^"]*)"', link).group(1)
+        inner_link = re.search(r'"url":"([^"]*)"', link).group(1)
+        filename = ''
+        if prevImageId != imageId:
+            mediaCount = 1
+            prevImageId = imageId
+        imgHash = hashlib.md5(str(inner_link).encode('utf-8')).hexdigest()
+        if "mp4" in inner_link:
+            filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
+            media_type = 'video'
+        else:
+            filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
+            media_type = 'image'
+        filepath = os.path.join(settings.downloaddir, profile, media_type)
+        os.makedirs(name=filepath, exist_ok=True)
+        mediainfo = {
+            'media_id': imgHash,
+            'post_id': imageId,
+            'link': inner_link,
+            'inner_link': inner_link,
+            'directory': filepath,
+            'filename': filename,
+            'size': 0,
+            'media_type': media_type,
+            'downloaded': False,
+            'created_at': datetime.datetime.now()
+        }
+        if not metadata.checkSaved(mediainfo):
+            metadata.saveLinks(mediainfo)
+        # print(filename)
+        if termCols < 80:
+            desc = f"M {truncate_middle(filename,12)}"
+        else:
+            desc = f"Mídia {filename}"
+        linkBar.set_description(desc)
+        linkBar.update()
+        mediaCount += 1
+        await asyncio.sleep(0)
         
 async def downloadLinks(drv, cookiejar):
     profilePath = os.path.join(settings.downloaddir, profile)
@@ -215,10 +218,10 @@ async def downloadLinks(drv, cookiejar):
     async with httpx.AsyncClient() as client:
         tasks = []
         for m in mediastoDownload:
-            link = m.link
+            inner_link = m.inner_link
             timeout = httpx.Timeout(10.0, read=60.0)
             task = asyncio.ensure_future(
-                client.request('HEAD',link,headers=hdr,cookies=cookiejar,timeout=timeout)
+                client.request('HEAD',inner_link,headers=hdr,cookies=cookiejar,timeout=timeout)
             )
             tasks.append(task)
         print("Verificando cabeçalhos de mídia...")
