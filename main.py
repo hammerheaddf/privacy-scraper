@@ -168,8 +168,9 @@ async def parseLinks(divs, profile):
         global linkBar, linkBarD
         await asyncio.sleep(0)
         
-        media_type = re.search(r'"type":"([^"]*)"', link).group(1)
+        # TODO refactorar aqui para pegar todas as URL e todos os media type, pois no carrosel as vezes vem 2 links e ele tá pegando só o primeiro.
         inner_link = re.search(r'"url":"([^"]*)"', link).group(1)
+        media_type = re.search(r'"type":"([^"]*)"', link).group(1)
         filename = ''
         if prevImageId != imageId:
             mediaCount = 1
