@@ -40,6 +40,19 @@ downloadBar: tqdm
 global barFormat
 barFormat = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, {rate_fmt}]'
 
+
+async def check_url(url, headers, cookies, timeout):
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.head(url, headers=headers, cookies=cookies, timeout=timeout)
+            return response
+        except httpx.ReadTimeout as e:
+            return f"ReadTimeout: {e}"
+        except httpx.ConnectTimeout as e:
+            return f"ConnectTimeout: {e}"
+        except httpx.RequestError as e:
+            return f"RequestError: {e}"
+
 # Funcao para mostrar os nomes dos perfis e numeros
 def display_profiles(profile_names):
     print("Perfis:")
@@ -167,9 +180,9 @@ async def parseLinks(divs, profile):
     
         global linkBar, linkBarD
         await asyncio.sleep(0)
-        
+
         # Extraindo as midias do carrosel
-        matches = re.findall(r'"type":"(.*?)","url":"(.*?)"', carousel)
+        matches = re.findall(r'\{"isLocked":false,"mediaId":".*?","type":"(.*?)","url":"(.*?)".*?\}', carousel)
 
         # Construindo um dicionario para pegar o media_type de cada arquivo
         media_info = {url: media_type for media_type, url in matches}
@@ -223,11 +236,11 @@ async def downloadLinks(drv, cookiejar, profile):
         tasks = []
         for m in mediastoDownload:
             inner_link = m.inner_link
-            timeout = httpx.Timeout(10.0, read=60.0)
-            task = asyncio.ensure_future(
-                client.request('HEAD',inner_link,headers=hdr,cookies=cookiejar,timeout=timeout)
-            )
-            tasks.append(task)
+            if inner_link:
+                timeout = httpx.Timeout(10.0, read=60.0)
+                task = asyncio.create_task(check_url(inner_link, hdr, cookiejar, timeout))
+                tasks.append(task)
+        
         print("Verificando cabeçalhos de mídia...")
         global responses
         responses = await tqdm.gather(*tasks,colour='blue',dynamic_ncols=True,bar_format=barFormat)
