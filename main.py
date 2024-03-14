@@ -150,79 +150,79 @@ async def parseLinks(divs, profile):
         if privacy_web_mediahub_carousel:
             for carousel_element in privacy_web_mediahub_carousel:
                 carousel = await carousel_element.evaluate('(element) => element.getAttribute("medias")')                                    
-        postTag = d.get_by_role('paragraph')
-        id_div = await d.locator('css=div.post-view-full').get_attribute('id')
-        postId = id_div.replace('Postagem','')
-        global prevPostId
-        if prevPostId != postId: #postContent != postTag.text:
-            global termCols
-            if termCols < 80:
-                desc = f"P {truncate_middle(postId,12)}"
-            else:
-                desc = f"Post  {postId}"
-            postBar.set_description(desc)
-            postBar.update()
-            global postContent
-            try:
-                await expect(postTag).to_have_count(count=1,timeout=2)
-                postContent = await postTag.text_content()
-                postContent = postContent.strip()
-                postinfo = {
-                    'post_id': postId,
-                    'post_text': postContent,
-                }
-                metadata.savePost(postinfo)
-                global numPosts
-                global postsTotal
-                postsTotal += 1
-            except AssertionError:
-                pass
-    
-        global linkBar, linkBarD
-        await asyncio.sleep(0)
-
-        # Extraindo as midias do carrosel
-        matches = re.findall(r'\{"isLocked":false,"mediaId":".*?","type":"(.*?)","url":"(.*?)".*?\}', carousel)
-
-        # Construindo um dicionario para pegar o media_type de cada arquivo
-        media_info = {media_link: media_type for media_type, media_link in matches if media_link and media_type}
-
-        for media_link, media_type in media_info.items():            
-            if prevPostId != postId:
-                mediaCount = 1
-                prevPostId = postId
-            imgHash = hashlib.md5(str(media_link).encode('utf-8')).hexdigest()
-            if "mp4" in media_link:
-                filename = postId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
-                media_type = 'video'
-            else:
-                filename = postId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
-                media_type = 'image'
-            filepath = os.path.join(settings.downloaddir, profile, media_type)
-            os.makedirs(name=filepath, exist_ok=True)
-            mediainfo = {
-                'media_id': imgHash,
-                'post_id': postId,
-                'link': media_link,
-                'inner_link': media_link,
-                'directory': filepath,
-                'filename': filename,
-                'size': 0,
-                'media_type': media_type,
-                'downloaded': False,
-                'created_at': datetime.datetime.now()
-            }
-            if not metadata.checkSaved(mediainfo):
-                metadata.saveLinks(mediainfo)
-            # print(filename)
-            if termCols < 80:
-                desc = f"M {truncate_middle(filename,12)}"
-            else:
-                desc = f"Mídia {filename}"
-            linkBar.set_description(desc)
-            linkBar.update()
-            mediaCount += 1
+            postTag = d.get_by_role('paragraph')
+            id_div = await d.locator('css=div.post-view-full').get_attribute('id')
+            postId = id_div.replace('Postagem','')
+            global prevPostId
+            if prevPostId != postId: #postContent != postTag.text:
+                global termCols
+                if termCols < 80:
+                    desc = f"P {truncate_middle(postId,12)}"
+                else:
+                    desc = f"Post  {postId}"
+                postBar.set_description(desc)
+                postBar.update()
+                global postContent
+                try:
+                    await expect(postTag).to_have_count(count=1,timeout=2)
+                    postContent = await postTag.text_content()
+                    postContent = postContent.strip()
+                    postinfo = {
+                        'post_id': postId,
+                        'post_text': postContent,
+                    }
+                    metadata.savePost(postinfo)
+                    global numPosts
+                    global postsTotal
+                    postsTotal += 1
+                except AssertionError:
+                    pass
+        
+            global linkBar, linkBarD
             await asyncio.sleep(0)
+
+            # Extraindo as midias do carrosel
+            matches = re.findall(r'\{"isLocked":false,"mediaId":".*?","type":"(.*?)","url":"(.*?)".*?\}', carousel)
+
+            # Construindo um dicionario para pegar o media_type de cada arquivo
+            media_info = {media_link: media_type for media_type, media_link in matches if media_link and media_type}
+
+            for media_link, media_type in media_info.items():            
+                if prevPostId != postId:
+                    mediaCount = 1
+                    prevPostId = postId
+                imgHash = hashlib.md5(str(media_link).encode('utf-8')).hexdigest()
+                if "mp4" in media_link:
+                    filename = postId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
+                    media_type = 'video'
+                else:
+                    filename = postId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
+                    media_type = 'image'
+                filepath = os.path.join(settings.downloaddir, profile, media_type)
+                os.makedirs(name=filepath, exist_ok=True)
+                mediainfo = {
+                    'media_id': imgHash,
+                    'post_id': postId,
+                    'link': media_link,
+                    'inner_link': media_link,
+                    'directory': filepath,
+                    'filename': filename,
+                    'size': 0,
+                    'media_type': media_type,
+                    'downloaded': False,
+                    'created_at': datetime.datetime.now()
+                }
+                if not metadata.checkSaved(mediainfo):
+                    metadata.saveLinks(mediainfo)
+                # print(filename)
+                if termCols < 80:
+                    desc = f"M {truncate_middle(filename,12)}"
+                else:
+                    desc = f"Mídia {filename}"
+                linkBar.set_description(desc)
+                linkBar.update()
+                mediaCount += 1
+                await asyncio.sleep(0)
         
 async def downloadLinks(drv, cookiejar, profile):
     profilePath = os.path.join(settings.downloaddir, profile)
