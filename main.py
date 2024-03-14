@@ -136,7 +136,7 @@ async def parseLinks(divs, profile):
         privacy_web_mediahub_carousel = await d.locator('//privacy-web-mediahub-carousel').all()
         if privacy_web_mediahub_carousel:
             for carousel_element in privacy_web_mediahub_carousel:
-                link = await carousel_element.evaluate('(element) => element.getAttribute("medias")')                                    
+                carousel = await carousel_element.evaluate('(element) => element.getAttribute("medias")')                                    
         postTag = d.get_by_role('paragraph')
         id_div = await d.locator('css=div.post-view-full').get_attribute('id')
         imageId = id_div.replace('Postagem','')
@@ -168,45 +168,48 @@ async def parseLinks(divs, profile):
         global linkBar, linkBarD
         await asyncio.sleep(0)
         
-        # TODO refactorar aqui para pegar todas as URL e todos os media type, pois no carrosel as vezes vem 2 links e ele tá pegando só o primeiro.
-        inner_link = re.search(r'"url":"([^"]*)"', link).group(1)
-        media_type = re.search(r'"type":"([^"]*)"', link).group(1)
-        filename = ''
-        if prevImageId != imageId:
-            mediaCount = 1
-            prevImageId = imageId
-        imgHash = hashlib.md5(str(inner_link).encode('utf-8')).hexdigest()
-        if "mp4" in inner_link:
-            filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
-            media_type = 'video'
-        else:
-            filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
-            media_type = 'image'
-        filepath = os.path.join(settings.downloaddir, profile, media_type)
-        os.makedirs(name=filepath, exist_ok=True)
-        mediainfo = {
-            'media_id': imgHash,
-            'post_id': imageId,
-            'link': inner_link,
-            'inner_link': inner_link,
-            'directory': filepath,
-            'filename': filename,
-            'size': 0,
-            'media_type': media_type,
-            'downloaded': False,
-            'created_at': datetime.datetime.now()
-        }
-        if not metadata.checkSaved(mediainfo):
-            metadata.saveLinks(mediainfo)
-        # print(filename)
-        if termCols < 80:
-            desc = f"M {truncate_middle(filename,12)}"
-        else:
-            desc = f"Mídia {filename}"
-        linkBar.set_description(desc)
-        linkBar.update()
-        mediaCount += 1
-        await asyncio.sleep(0)
+        # Extraindo as midias do carrosel
+        matches = re.findall(r'"type":"(.*?)","url":"(.*?)"', carousel)
+
+        # Construindo um dicionario para pegar o media_type de cada arquivo
+        media_info = {url: media_type for media_type, url in matches}
+
+        for url, media_type in media_info.items():            
+            if prevImageId != imageId:
+                mediaCount = 1
+                prevImageId = imageId
+            imgHash = hashlib.md5(str(url).encode('utf-8')).hexdigest()
+            if "mp4" in url:
+                filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
+                media_type = 'video'
+            else:
+                filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
+                media_type = 'image'
+            filepath = os.path.join(settings.downloaddir, profile, media_type)
+            os.makedirs(name=filepath, exist_ok=True)
+            mediainfo = {
+                'media_id': imgHash,
+                'post_id': imageId,
+                'link': url,
+                'inner_link': url,
+                'directory': filepath,
+                'filename': filename,
+                'size': 0,
+                'media_type': media_type,
+                'downloaded': False,
+                'created_at': datetime.datetime.now()
+            }
+            if not metadata.checkSaved(mediainfo):
+                metadata.saveLinks(mediainfo)
+            # print(filename)
+            if termCols < 80:
+                desc = f"M {truncate_middle(filename,12)}"
+            else:
+                desc = f"Mídia {filename}"
+            linkBar.set_description(desc)
+            linkBar.update()
+            mediaCount += 1
+            await asyncio.sleep(0)
         
 async def downloadLinks(drv, cookiejar, profile):
     profilePath = os.path.join(settings.downloaddir, profile)
