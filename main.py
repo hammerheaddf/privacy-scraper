@@ -185,7 +185,7 @@ async def parseLinks(divs, profile):
         matches = re.findall(r'\{"isLocked":false,"mediaId":".*?","type":"(.*?)","url":"(.*?)".*?\}', carousel)
 
         # Construindo um dicionario para pegar o media_type de cada arquivo
-        media_info = {url: media_type for media_type, url in matches}
+        media_info = {url: media_type for media_type, url in matches if url and media_type}
 
         for url, media_type in media_info.items():            
             if prevImageId != imageId:
@@ -312,6 +312,8 @@ async def downloadLinks(drv, cookiejar, profile):
             await drv.reload()
             cookiejar = await refreshCookies(drv)
         print("Baixando mídia...")
+        # m.filename == 'b3a4b631-ab8e-419a-b000-5e0d0c4e43a7-002.jpg'
+        # perdendo o link de um arquivo, ficando com a url vazia mas no resto está vindo correto a url
         await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [requestLink(medias, cookiejar) for _ in range(4)]))
 
 async def retrieveLinks(mediastoDownload, medias: asyncio.Queue()):
