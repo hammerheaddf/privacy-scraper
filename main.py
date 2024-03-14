@@ -30,7 +30,7 @@ postsTotal = 0
 linksTotal = 0
 metadata = ""
 postContent = ''
-prevImageId = ''
+prevPostId = ''
 numPosts = 0
 termCols = 0
 responses = ''
@@ -152,14 +152,14 @@ async def parseLinks(divs, profile):
                 carousel = await carousel_element.evaluate('(element) => element.getAttribute("medias")')                                    
         postTag = d.get_by_role('paragraph')
         id_div = await d.locator('css=div.post-view-full').get_attribute('id')
-        imageId = id_div.replace('Postagem','')
-        global prevImageId
-        if prevImageId != imageId: #postContent != postTag.text:
+        postId = id_div.replace('Postagem','')
+        global prevPostId
+        if prevPostId != postId: #postContent != postTag.text:
             global termCols
             if termCols < 80:
-                desc = f"P {truncate_middle(imageId,12)}"
+                desc = f"P {truncate_middle(postId,12)}"
             else:
-                desc = f"Post  {imageId}"
+                desc = f"Post  {postId}"
             postBar.set_description(desc)
             postBar.update()
             global postContent
@@ -168,7 +168,7 @@ async def parseLinks(divs, profile):
                 postContent = await postTag.text_content()
                 postContent = postContent.strip()
                 postinfo = {
-                    'post_id': imageId,
+                    'post_id': postId,
                     'post_text': postContent,
                 }
                 metadata.savePost(postinfo)
@@ -185,26 +185,26 @@ async def parseLinks(divs, profile):
         matches = re.findall(r'\{"isLocked":false,"mediaId":".*?","type":"(.*?)","url":"(.*?)".*?\}', carousel)
 
         # Construindo um dicionario para pegar o media_type de cada arquivo
-        media_info = {url: media_type for media_type, url in matches if url and media_type}
+        media_info = {media_link: media_type for media_type, media_link in matches if media_link and media_type}
 
-        for url, media_type in media_info.items():            
-            if prevImageId != imageId:
+        for media_link, media_type in media_info.items():            
+            if prevPostId != postId:
                 mediaCount = 1
-                prevImageId = imageId
-            imgHash = hashlib.md5(str(url).encode('utf-8')).hexdigest()
-            if "mp4" in url:
-                filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
+                prevPostId = postId
+            imgHash = hashlib.md5(str(media_link).encode('utf-8')).hexdigest()
+            if "mp4" in media_link:
+                filename = postId + '-' + str(mediaCount).rjust(3,'0') + '.mp4'
                 media_type = 'video'
             else:
-                filename = imageId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
+                filename = postId + '-' + str(mediaCount).rjust(3,'0') + '.jpg'
                 media_type = 'image'
             filepath = os.path.join(settings.downloaddir, profile, media_type)
             os.makedirs(name=filepath, exist_ok=True)
             mediainfo = {
                 'media_id': imgHash,
-                'post_id': imageId,
-                'link': url,
-                'inner_link': url,
+                'post_id': postId,
+                'link': media_link,
+                'inner_link': media_link,
                 'directory': filepath,
                 'filename': filename,
                 'size': 0,
@@ -311,7 +311,7 @@ async def downloadLinks(drv, cookiejar, profile):
         if (savedTotal>0 and savedTotal % 200 == 0) or len(medialist) > 1000:
             await drv.reload()
             cookiejar = await refreshCookies(drv)
-        print("Baixando mídia...")
+        print(" Baixando mídia...")
         # m.filename == 'b3a4b631-ab8e-419a-b000-5e0d0c4e43a7-002.jpg'
         # perdendo o link de um arquivo, ficando com a url vazia mas no resto está vindo correto a url
         await asyncio.gather(*([retrieveLinks(mediastoDownload,medias)] + [requestLink(medias, cookiejar) for _ in range(4)]))
