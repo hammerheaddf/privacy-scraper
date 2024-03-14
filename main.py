@@ -83,7 +83,7 @@ async def fetch_profiles(page: pw.Page, profile, backlog):
     processes = []
     if not backlog:
         print("Buscando postagens com mídia...")
-        proc1 = multiprocessing.Process(target=await fetchLinks(page,jar))
+        proc1 = multiprocessing.Process(target=await fetchLinks(page,jar, profile))
         processes.append(proc1)
         proc1.start()
     else:
@@ -93,7 +93,7 @@ async def fetch_profiles(page: pw.Page, profile, backlog):
     if type(metadata) == str:
         openDatabase()
     if metadata.getMediaDownloadCount() > 0:
-        proc2 = multiprocessing.Process(target=await downloadLinks(page,jar))
+        proc2 = multiprocessing.Process(target=await downloadLinks(page,jar,profile))
         processes.append(proc2)
         proc2.start()
     else:
@@ -102,7 +102,7 @@ async def fetch_profiles(page: pw.Page, profile, backlog):
         proc.join()
 
 
-async def fetchLinks(page: pw.Page, jar):
+async def fetchLinks(page: pw.Page, jar, profile):
     # https://privacy.com.br/Index?handler=PartialPosts&skip=10&take=20&nomePerfil=Suelenstodulskii&agendado=false
     skip = 0
     take = 50
@@ -121,7 +121,7 @@ async def fetchLinks(page: pw.Page, jar):
             break
         linksTotal += len(links)
         linkBar.total = linksTotal
-        await parseLinks(divs)
+        await parseLinks(divs, profile)
         skip += take
     postBar.close()
     linkBar.close()
@@ -129,7 +129,7 @@ async def fetchLinks(page: pw.Page, jar):
     global postsTotal
     print(f"{postsTotal} postagens com texto e mídia, {metadata.getMediaCount()} mídias encontradas. Baixando {metadata.getMediaDownloadCount()} mídias.")
     
-async def parseLinks(divs):
+async def parseLinks(divs, profile):
     openDatabase()
     mediaCount = 0
     for d in divs:
@@ -207,7 +207,7 @@ async def parseLinks(divs):
         mediaCount += 1
         await asyncio.sleep(0)
         
-async def downloadLinks(drv, cookiejar):
+async def downloadLinks(drv, cookiejar, profile):
     profilePath = os.path.join(settings.downloaddir, profile)
     os.makedirs(name=profilePath, exist_ok=True)
     global metadata
@@ -440,7 +440,8 @@ async def main(backlog):
         await btn.click()
         # procura avatar do usuário
         print("Aguardando autenticação...")
-        await expect(page.get_by_placeholder('Pesquise aqui...')).   to_be_visible(timeout=90000)
+        await expect(page.get_by_placeholder('Pesquise aqui...')).to_be_visible(timeout=90000)
+        sleep(5)
         
         #entrando na pagina do perfil para verificar os perfis seguidos
         await page.goto(following_url)
