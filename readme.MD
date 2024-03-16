@@ -8,13 +8,8 @@ Creative Commons
 1. Instale os requerimentos utilizando
 
 ```
-pip install --force-reinstall -v .\requirements.txt
+pip install -r requirements.txt
 
-```
-
-*IMPORTANTE*: Verifique a versão do sqlalchemy, caso necessario, edit o arquivo para ficar na versão 2.0.28, caso não, edite o *requirements.txt* com
-```
-sqlalchemy=2.0.28
 ```
 
 2. Crie um arquivo na raiz chamado .secrets.yaml com a seguinte arvore:
