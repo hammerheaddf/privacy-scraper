@@ -1,4 +1,4 @@
-# Privacy Scrapper
+# Privacy Scraper
 
 ## Copyright 
 Creative Commons
