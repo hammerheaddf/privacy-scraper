@@ -17,6 +17,7 @@ from tqdm.asyncio import tqdm
 import re
 from dateutil.parser import parse
 import time
+from requests.models import Response
 
 url = "https://privacy.com.br/"
 base_url = "https://privacy.com.br/profile/"
@@ -269,7 +270,7 @@ async def downloadLinks(drv, cookiejar, profile):
                 temp_response = [
                     response
                     for response in r
-                    if response and str(response.url) == media.link
+                    if isinstance(response, Response) and response and str(response.url) == media.link
                     ]
                 if temp_response:
                     temp_response = temp_response[0]
@@ -338,7 +339,7 @@ async def requestLink(medias, cookiejar):
         temp_response = [
             response
             for response in responses
-            if response and str(response.url) == media.link
+            if isinstance(response, Response) and response and str(response.url) == media.link
         ]
         url = media.link
         if temp_response:
